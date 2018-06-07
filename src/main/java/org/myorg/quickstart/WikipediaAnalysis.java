@@ -20,33 +20,20 @@ public class WikipediaAnalysis {
         StreamExecutionEnvironment see = StreamExecutionEnvironment.getExecutionEnvironment();
         DataStream<WikipediaEditEvent> edits = see.addSource(new WikipediaEditsSource());
         KeyedStream<WikipediaEditEvent, String> keyedEdits = edits
-                .keyBy(new KeySelector<WikipediaEditEvent, String>() {
-                    @Override
-                    public String getKey(WikipediaEditEvent event) {
-                        return event.getUser();
-                    }
-                });
+                .keyBy((KeySelector<WikipediaEditEvent, String>) event -> event.getUser());
 
         DataStream<Tuple2<String, Long>> result = keyedEdits
                 .timeWindow(Time.seconds(5))
-                .fold(new Tuple2<>("", 0L), new FoldFunction<WikipediaEditEvent, Tuple2<String, Long>>() {
-                    @Override
-                    public Tuple2<String, Long> fold(Tuple2<String, Long> acc, WikipediaEditEvent event) {
-                        acc.f0 = event.getUser();
-                        acc.f1 += event.getByteDiff();
-                        return acc;
-                    }
+                .fold(new Tuple2<>("", 0L), (FoldFunction<WikipediaEditEvent, Tuple2<String, Long>>) (acc, event) -> {
+                    acc.f0 = event.getUser();
+                    acc.f1 += event.getByteDiff();
+                    return acc;
                 });
 
         //result.print();
 
         result
-                .map(new MapFunction<Tuple2<String,Long>, String>() {
-                    @Override
-                    public String map(Tuple2<String, Long> tuple) {
-                        return tuple.toString();
-                    }
-                })
+                .map((MapFunction<Tuple2<String, Long>, String>) tuple -> tuple.toString())
                 .addSink(new FlinkKafkaProducer011<String>("localhost:9092", "wiki-result", new SimpleStringSchema()));
 
         see.execute();
